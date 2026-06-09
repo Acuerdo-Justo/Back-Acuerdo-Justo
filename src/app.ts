@@ -5,12 +5,17 @@ import { ZodError } from 'zod';
 import { env } from './config/env.js';
 import { adminRoutes } from './routes/adminRoutes.js';
 import { authRoutes } from './routes/authRoutes.js';
+import { appointmentRoutes } from './routes/appointmentRoutes.js';
+import { caseRoutes } from './routes/caseRoutes.js';
+import { meetingRoutes } from './routes/meetingRoutes.js';
+import { dashboardRoutes } from './routes/dashboardRoutes.js';
+import { notificationRoutes } from './routes/notificationRoutes.js';
 import { HttpError } from './utils/httpError.js';
 
 export const app = express();
 
 app.use(helmet());
-app.use(cors({ origin: env.FRONTEND_URL }));
+app.use(cors({ origin: env.FRONTEND_URL, credentials: true }));
 app.use(express.json({ limit: '100kb' }));
 
 app.get('/api/health', (_request, response) => {
@@ -19,6 +24,11 @@ app.get('/api/health', (_request, response) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/appointments', appointmentRoutes);
+app.use('/api/cases', caseRoutes);
+app.use('/api/meetings', meetingRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 app.use((_request, response) => {
   response.status(404).json({ message: 'Ruta no encontrada.' });

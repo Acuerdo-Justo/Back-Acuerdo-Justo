@@ -3,7 +3,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { pool } from '../database/pool.js';
 import { requireAuth } from '../middleware/auth.js';
-import { createAccessToken } from '../services/tokenService.js';
+import { clearAuthCookie, getAuthToken, setAuthCookie } from '../services/authCookie.js';
+import { createAccessToken, verifyAccessToken } from '../services/tokenService.js';
 import type { AuthUser, UserRole } from '../types/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { HttpError } from '../utils/httpError.js';
@@ -35,7 +36,9 @@ router.post('/register', asyncHandler(async (request, response) => {
       [input.fullName, input.username, passwordHash],
     );
     const user = toAuthUser(result.rows[0]);
-    response.status(201).json({ user, accessToken: createAccessToken(user) });
+    const session = await pool.query('insert into auth_sessions (user_id) values ($1) returning id', [user.id]);
+    setAuthCookie(response, createAccessToken(user, session.rows[0].id));
+    response.status(201).json({ user });
   } catch (error) {
     if (typeof error === 'object' && error && 'code' in error && error.code === '23505') {
       throw new HttpError(409, 'El nombre de usuario ya esta registrado.');
@@ -59,17 +62,32 @@ router.post('/login', asyncHandler(async (request, response) => {
   }
 
   const user = toAuthUser(row);
-  response.json({ user, accessToken: createAccessToken(user) });
+  const session = await pool.query('insert into auth_sessions (user_id) values ($1) returning id', [user.id]);
+  setAuthCookie(response, createAccessToken(user, session.rows[0].id));
+  response.json({ user });
 }));
 
-router.get('/me', requireAuth, asyncHandler(async (request, response) => {
-  const result = await pool.query(
-    'select id, full_name, username, role from users where id = $1 and is_active = true',
-    [request.user!.id],
-  );
+router.post('/logout', asyncHandler(async (request, response) => {
+  const token = getAuthToken(request);
+  if (token) {
+    try {
+      const tokenUser = verifyAccessToken(token);
+      await pool.query('update auth_sessions set revoked_at = now() where id = $1', [tokenUser.sessionId]);
+    } catch {
+      // The cookie is cleared even when its token has expired.
+    }
+  }
+  clearAuthCookie(response);
+  response.status(204).end();
+}));
 
-  if (!result.rows[0]) throw new HttpError(404, 'Usuario no encontrado.');
-  response.json({ user: toAuthUser(result.rows[0]) });
+router.get('/me', requireAuth, (request, response) => {
+  response.json({ user: request.user });
+});
+
+router.post('/activity', requireAuth, asyncHandler(async (request, response) => {
+  await pool.query('update auth_sessions set last_activity = now() where id = $1', [request.sessionId]);
+  response.status(204).end();
 }));
 
 export { router as authRoutes };
