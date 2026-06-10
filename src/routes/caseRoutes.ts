@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { Router } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
+import { env } from '../config/env.js';
 import { pool } from '../database/pool.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
@@ -170,6 +171,8 @@ router.get('/documents/:documentId/download', asyncHandler(async (request, respo
   const disposition = inlineMimeTypes.has(document.mime_type) ? 'inline' : 'attachment';
   response.setHeader('Content-Type', document.mime_type);
   response.setHeader('Content-Disposition', `${disposition}; filename*=UTF-8''${encodeURIComponent(document.original_name)}`);
+  response.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${new URL(env.FRONTEND_URL).origin}`);
+  response.removeHeader('X-Frame-Options');
   response.setHeader('X-Content-Type-Options', 'nosniff');
   createReadStream(`${uploadsDirectory}/${document.stored_name}`).pipe(response);
 }));
